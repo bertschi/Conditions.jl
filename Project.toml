@@ -1,0 +1,8 @@
+name = "Conditions"
+uuid = "58c6bb6d-7a3e-4d45-baf8-feb6418b1030"
+authors = "bertschi"
+version = "0.1.0"
+
+[deps]
+Infiltrator = "5903a43b-9cc3-4c30-8d17-598619ec4e9b"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"

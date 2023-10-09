@@ -5,25 +5,24 @@ using Infiltrator
 # Simple non-local exit
 
 struct NonLocal{T}
+    tag::Symbol
     val::T
 end
 
-macro nonlocal(body)
-    quote
-        try
-            $(esc(body))
-        catch e
-            if isa(e, NonLocal)
-                e.val
-            else
-                rethrow(e)
-            end
+function nonlocal(body, tag)
+    try
+        body()
+    catch e
+        if isa(e, NonLocal) && e.tag == tag
+            e.val
+        else
+            rethrow(e)
         end
     end
 end
 
-function jump(val)
-    throw(NonLocal(val))
+function jump(tag, val)
+    throw(NonLocal(tag, val))
 end
 
 # Dynamically bound handlers
@@ -82,7 +81,7 @@ function handler_bind(body, handlers...)
     with_handlers(body, handlers => get_handlers())
 end
 
-export @nonlocal, jump
+export nonlocal, jump
 
 export Handler, NoMatchingHandler
 export signal, handler_bind

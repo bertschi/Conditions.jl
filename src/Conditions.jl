@@ -32,8 +32,6 @@ struct Handler{T,F}
     fun::F
 end
 
-const default_handler = Handler(Exception, c -> @infiltrate)
-
 const handler_key = gensym("handler_stack")
 
 function get_handlers()
@@ -54,6 +52,10 @@ struct NoMatchingHandler{C} <: Exception
     condition::C
 end
 
+handle_interactive::Ref{Bool} = Ref(true)
+
+toggle_interactive(b::Bool) = handle_interactive[] = b
+
 function signal(condition)
     # Just run all matching handlers here
     stack = get_handlers()
@@ -67,13 +69,19 @@ function signal(condition)
         end
         stack = last(stack)
     end
-    # Check for default handler
-    if condition isa default_handler.type
-        with_handlers(nothing) do
-            default_handler.fun(condition)
+end
+
+# Make signal a macro to @infiltrate at actual error location in interactive use
+macro signal(condition)
+    c = esc(condition)
+    quote
+        signal($c)
+        # Now check for interactive use or throw
+        if handle_interactive[]
+            @infiltrate
+        else
+            throw(NoMatchingHandler($c))
         end
-    else
-        throw(NoMatchingHandler(condition))
     end
 end
 
@@ -84,6 +92,6 @@ end
 export nonlocal, jump
 
 export Handler, NoMatchingHandler
-export signal, handler_bind
+export toggle_interactive, @signal, handler_bind
 
 end # module Conditions

@@ -3,6 +3,7 @@ using Conditions
 using Test
 
 @testset "signal condition" begin
+    toggle_interactive(false)
     myerr = ArgumentError("test")
     myval = :test_that
     myhandler = Handler(ArgumentError, c -> jump(:here, c))
@@ -13,10 +14,10 @@ using Test
     end
     @test myerr == nonlocal(:here) do
         handler_bind(myhandler) do
-            signal(myerr)
+            @signal myerr
         end
     end
     @test_throws NoMatchingHandler handler_bind(myhandler) do
-        signal("This is no error")
+        @signal "This is no error"
     end
 end

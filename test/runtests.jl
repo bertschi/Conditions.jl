@@ -62,3 +62,34 @@ end
         Any => c -> (:any, c)
     end
 end
+
+@testset "Restarts" begin
+    @test 7 == nonlocal(:out) do
+        restart_bind(Restart(:myrestart, c -> jump(:out, c + 1))) do
+            handler_bind(Handler(Any, c -> invoke_restart(find_restart(:myrestart), 2 * c))) do
+                @signal 3
+            end
+        end
+    end
+    @test 7 == handler_bind(Handler(Any, c -> invoke_restart(find_restart(:myrestart), 2 * c))) do
+        nonlocal(:out) do
+            restart_bind(Restart(:myrestart, c -> jump(:out, c + 1))) do
+                @signal 3
+            end
+        end
+    end
+    # Same with @restart_case
+    @test 7 == handler_bind(Handler(Any, c -> invoke_restart(find_restart(:myrestart), 2 * c))) do
+        @restart_case @signal(3) begin
+            :myrestart => c -> c + 1
+        end
+    end
+    @test 7 == @restart_case(
+        @handler_case(@signal(3),
+                      begin
+                          Any => c -> invoke_restart(find_restart(:myrestart), 2 * c)
+                      end),
+        begin
+            :myrestart => c -> c + 1
+        end)
+end

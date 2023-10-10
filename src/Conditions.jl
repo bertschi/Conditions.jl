@@ -74,15 +74,19 @@ struct Handler{T,F}
     fun::F
 end
 
-const handler_key = gensym("handler_stack")
+const handler_key = :HANDLER_STACK
 
-function get_handlers()
+function get_dynamic(key)
     store = task_local_storage()
-    if haskey(store, handler_key)
-        store[handler_key]
+    if haskey(store, key)
+        store[key]
     else
         nothing
     end
+end
+
+function get_handlers()
+    get_dynamic(handler_key)
 end
 
 function with_handlers(body, stack)
@@ -103,8 +107,10 @@ Set if signals should be handled interactively if no matching handler can be fou
 If `true` an `Infiltrator` at the point of signalling is established. 
 If `false` a `NoMatchingHandler` error is thrown.
 """
-toggle_interactive(b::Bool) = handle_interactive[] = b
-
+function toggle_interactive(b::Bool)
+    handle_interactive[] = b
+end
+    
 function signal(condition)
     # Just run all matching handlers here
     # Note: Handler stack is stored as nested pairs used like a nothing terminated list!
@@ -228,9 +234,122 @@ macro handler_case(expr, handler_block)
     end
 end
 
+# Restarts
+
+"""
+    Restart(name::Symbol, fun)
+
+Create a restart with the given `name` and function `fun`.
+"""
+struct Restart{F}
+    name::Symbol
+    fun::F
+end
+
+const restart_key = :RESTART_STACK
+
+function get_restarts()
+    get_dynamic(restart_key)
+end
+
+function with_restarts(body, stack)
+    task_local_storage(body, restart_key, stack)
+end
+
+"""
+    invoke_restart(restart::Restart, args...)
+
+Call the function of `restart` with the given `args`.
+"""
+function invoke_restart(restart::Restart, args...)
+    restart.fun(args...)
+end
+
+# function compute_restarts()
+#     # Flattens restart stack
+#     Iterators.flatmap(first,
+#                       IterTools.takewhile((!) ∘ isnothing,
+#                                           IterTools.iterated(last, get_restarts())))
+# end
+
+"""
+    find_restart(name::Symbol)
+
+Find a restart with this `name`. If multiple restarts with the same name are
+active only the most recently established one is found.
+Returns nothing if no restart with this name is available.
+"""
+function find_restart(name::Symbol)
+    stack = get_restarts()
+    while !isnothing(stack)
+        for restart in first(stack)
+            if restart.name == name
+                return restart
+            end
+        end
+        stack = last(stack)
+    end
+    return nothing
+end
+
+"""
+    restart_bind(body, restarts::Restart...)
+
+Establishes restarts and runs `body`.
+When `body` returns normally, its result is returned.
+When `body` signals a condition, a signal handler can decide to invoke
+one of the available restarts.
+
+Note: Low level function. More often than not, [`@restart_case`](@ref) is what you want.
+"""
+function restart_bind(body, restarts::Restart...)
+    with_restarts(body, restarts => get_restarts())
+end
+
+"""
+Convenience macro around [`restart_bind`](@ref) which unwinds the stack
+before running a restart.
+
+Note: If a handler wants to run a restart higher-up in the stack this has
+      to be done within `handler_bind`, i.e., without unwinding the stack
+
+# Example
+```julia-repl
+julia> handler_bind(Handler(Any, c -> invoke_restart(find_restart(:myrestart), 2 * c))) do
+           @restart_case @signal(3) begin
+               :myrestart => c -> c + 1
+           end
+       end
+7
+```
+"""
+macro restart_case(expr, restart_block)
+    names = [spec.args[2] for spec in restart_block.args if spec isa Expr]
+    funs = [spec.args[3] for spec in restart_block.args if spec isa Expr]
+    tag = QuoteNode(gensym("tag"))
+    restarts = [:(Restart($(esc(name)), (args...) -> jump($(esc(tag)), ($(i), args))))
+                for (i, name) in enumerate(names)]
+    quote
+        let (i, res) = (nonlocal($(esc(tag))) do
+                            restart_bind($(restarts...)) do
+                                (0, $(esc(expr)))
+                            end
+                        end)
+            if iszero(i)
+                res
+            else
+                [$(funs...)][i](res...)
+            end
+        end
+    end
+end
+
+# Exported public API
+
 export nonlocal, jump
 
 export Handler, NoMatchingHandler
 export toggle_interactive, @signal, handler_bind, @handler_case
+export Restart, find_restart, invoke_restart, restart_bind, @restart_case
 
 end # module Conditions

@@ -1,4 +1,1 @@
-# The example from chapter ??? of "Practical Common Lisp"
-
-using Conditions
-
+# The example from chapter 19 of "Practical Common Lisp"

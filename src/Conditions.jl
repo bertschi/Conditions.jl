@@ -193,7 +193,7 @@ end
 """
 Convenience macro around [`handler_bind`](@ref) which works similar
 to try-catch, i.e., the first matching handler is run with the stack
-unwound and its result is returned (like try-catch).
+unwound and its result is returned.
 
 # Examples
 ```julia-repl

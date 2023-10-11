@@ -1,6 +1,31 @@
 module Conditions
 
 using Infiltrator
+using ScopedValues
+
+# Simple immutable stack type
+
+abstract type Stack{T}
+end
+
+struct Empty{T} <: Stack{T}
+end
+
+struct Top{T} <: Stack{T}
+    top::T
+    below::Stack{T}
+end
+
+function put(x::T, s::Stack{T}) where {T}
+    Top{T}(x, s)
+end
+
+function isempty(s::Empty)
+    true
+end
+function isempty(s::Stack)
+    false
+end
 
 # Simple non-local exit
 
@@ -74,23 +99,14 @@ struct Handler{T,F}
     fun::F
 end
 
-const handler_key = :HANDLER_STACK
-
-function get_dynamic(key)
-    store = task_local_storage()
-    if haskey(store, key)
-        store[key]
-    else
-        nothing
-    end
-end
+const handler_stack = ScopedValue{Stack{Any}}(Empty{Any}())
 
 function get_handlers()
-    get_dynamic(handler_key)
+    handler_stack[]
 end
 
 function with_handlers(body, stack)
-    task_local_storage(body, handler_key, stack)
+    with(body, handler_stack => stack)
 end
 
 struct NoMatchingHandler{C} <: Exception
@@ -115,15 +131,15 @@ function signal(condition)
     # Just run all matching handlers here
     # Note: Handler stack is stored as nested pairs used like a nothing terminated list!
     stack = get_handlers()
-    while !isnothing(stack)
-        with_handlers(last(stack)) do
-            for handler in first(stack)
+    while !isempty(stack)
+        with_handlers(stack.below) do
+            for handler in stack.top
                 if condition isa handler.type
                     handler.fun(condition)
                 end
             end
         end
-        stack = last(stack)
+        stack = stack.below
     end
 end
 
@@ -193,7 +209,7 @@ julia> nonlocal(:out) do
 ```
 """
 function handler_bind(body, handlers::Handler...)
-    with_handlers(body, handlers => get_handlers())
+    with_handlers(body, put(handlers, get_handlers()))
 end
 
 """
@@ -246,14 +262,14 @@ struct Restart{F}
     fun::F
 end
 
-const restart_key = :RESTART_STACK
+const restart_stack = ScopedValue{Stack{Any}}(Empty{Any}())
 
 function get_restarts()
-    get_dynamic(restart_key)
+    restart_stack[]
 end
 
 function with_restarts(body, stack)
-    task_local_storage(body, restart_key, stack)
+    with(body, restart_stack => stack)
 end
 
 """
@@ -281,13 +297,13 @@ Returns nothing if no restart with this name is available.
 """
 function find_restart(name::Symbol)
     stack = get_restarts()
-    while !isnothing(stack)
-        for restart in first(stack)
+    while !isempty(stack)
+        for restart in stack.top
             if restart.name == name
                 return restart
             end
         end
-        stack = last(stack)
+        stack = stack.below
     end
     return nothing
 end
@@ -303,7 +319,7 @@ one of the available restarts.
 Note: Low level function. More often than not, [`@restart_case`](@ref) is what you want.
 """
 function restart_bind(body, restarts::Restart...)
-    with_restarts(body, restarts => get_restarts())
+    with_restarts(body, put(restarts, get_restarts()))
 end
 
 """

@@ -43,7 +43,7 @@ f(3)
 # Try @trace and @locals from the infiltration prompt! 
 ```
 
-Restarts are the real deal and allow lower-level code decide how to
+Restarts are the real deal and allow top-level code decide how to
 fix stuff higher up on the stack!
 
 ```julia

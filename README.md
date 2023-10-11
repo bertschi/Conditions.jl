@@ -59,7 +59,7 @@ end
 
 function validate(x::Number)
     @restart_case nonneg(x) begin
-        :fix_value => z -> z
+        :fix_value => newval -> newval
     end
 end
 
@@ -72,10 +72,10 @@ end
 # Restart functions
 function fix_value(condition)
     fixme = find_restart(:fix_value)
-    x = 2
     if !isnothing(fixme)
-        println("Fixing $(condition.msg) into $x")
-        invoke_restart(fixme, x)
+        fixval = 2
+        println("Fixing $(condition.msg) into $fixval")
+        invoke_restart(fixme, fixval)
     end
 end
 

@@ -230,10 +230,10 @@ See also [`@signal`](@ref), [`handler_bind`](@ref) as well as
 [`nonlocal`](@ref) and [`jump`](@ref).
 """
 macro handler_case(expr, handler_block)
-    types = [spec.args[2] for spec in handler_block.args if spec isa Expr]
-    funs = [spec.args[3] for spec in handler_block.args if spec isa Expr]
+    types = [esc(spec.args[2]) for spec in handler_block.args if spec isa Expr]
+    funs = [esc(spec.args[3]) for spec in handler_block.args if spec isa Expr]
     tag = QuoteNode(gensym("tag"))
-    handlers = [:(Handler($(esc(type)), c -> jump($(esc(tag)), ($(i), c))))
+    handlers = [:(Handler($(type), c -> jump($(esc(tag)), ($(i), c))))
                 for (i, type) in enumerate(types)]
     quote
         let (i, c) = (nonlocal($(esc(tag))) do
@@ -340,10 +340,10 @@ julia> handler_bind(Handler(Any, c -> invoke_restart(find_restart(:myrestart), 2
 ```
 """
 macro restart_case(expr, restart_block)
-    names = [spec.args[2] for spec in restart_block.args if spec isa Expr]
-    funs = [spec.args[3] for spec in restart_block.args if spec isa Expr]
+    names = [esc(spec.args[2]) for spec in restart_block.args if spec isa Expr]
+    funs = [esc(spec.args[3]) for spec in restart_block.args if spec isa Expr]
     tag = QuoteNode(gensym("tag"))
-    restarts = [:(Restart($(esc(name)), (args...) -> jump($(esc(tag)), ($(i), args))))
+    restarts = [:(Restart($(name), (args...) -> jump($(esc(tag)), ($(i), args))))
                 for (i, name) in enumerate(names)]
     quote
         let (i, res) = (nonlocal($(esc(tag))) do
